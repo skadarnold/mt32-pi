@@ -120,7 +120,9 @@ CMT32Pi::CMT32Pi(CI2CMaster* pI2CMaster, CSPIMaster* pSPIMaster, CInterruptSyste
 	  m_nMasterVolume(100),
 	  m_pCurrentSynth(nullptr),
 	  m_pMT32Synth(nullptr),
-	  m_pSoundFontSynth(nullptr)
+	  m_pSoundFontSynth(nullptr),
+
+	  m_pLuaState(nullptr)
 {
 	s_pThis = this;
 }
@@ -304,6 +306,19 @@ bool CMT32Pi::Initialize(bool bSerialMIDIAvailable)
 
 	CCPUThrottle::Get()->DumpStatus();
 	SetPowerSaveTimeout(m_pConfig->SystemPowerSaveTimeout);
+
+	// Init scripting engine
+	m_pLuaState = luaL_newstate();
+	luaL_openlibs(m_pLuaState);
+
+	if (luaL_loadfile(m_pLuaState, "SD:midi.lua") == LUA_OK)
+		m_pLogger->Write(MT32PiName, LogNotice, "Loaded Lua script");
+	else
+	{
+		m_pLogger->Write(MT32PiName, LogNotice, "Lua script not loaded");
+		lua_close(m_pLuaState);
+		m_pLuaState = nullptr;
+	}
 
 	// Clear LCD
 	if (m_pLCD)
@@ -637,6 +652,33 @@ void CMT32Pi::OnUnderVoltageDetected()
 
 void CMT32Pi::OnShortMessage(u32 nMessage)
 {
+	// Filter using scripting engine
+	if (m_pLuaState)
+	{
+		const int nStackSize = lua_gettop(m_pLuaState);
+
+		// Should be LUA_TFUNCTION
+		lua_getglobal(m_pLuaState, "onShortMessage");
+		lua_pushinteger(m_pLuaState, nMessage & 0xFF);
+		lua_pushinteger(m_pLuaState, (nMessage >> 8) & 0xFF);
+		lua_pushinteger(m_pLuaState, (nMessage >> 16) & 0xFF);
+		lua_call(m_pLuaState, 3, LUA_MULTRET);
+
+		const int nReturns = lua_gettop(m_pLuaState) - nStackSize;
+
+		if (nReturns != 3)
+		{
+			lua_pop(m_pLuaState, nReturns);
+			return;
+		}
+
+		nMessage = (lua_tointeger(m_pLuaState, -1) & 0xFF) |
+			   ((lua_tointeger(m_pLuaState, -2) & 0xFF) << 8) |
+			   ((lua_tointeger(m_pLuaState, -3) & 0xFF) << 16);
+
+		lua_pop(m_pLuaState, nReturns);
+	}
+
 	// Active sensing
 	if (nMessage == 0xFE)
 	{

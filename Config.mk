@@ -85,5 +85,7 @@ FLUIDSYNTHBUILDDIR=build-fluidsynth
 FLUIDSYNTHLIB=$(FLUIDSYNTHBUILDDIR)/src/libfluidsynth.a
 
 INIHHOME=$(realpath external/inih)
+LUAHOME=$(realpath external/lua)
+LUALIB=$(LUAHOME)/liblua.a
 
 -include $(CIRCLE_STDLIB_CONFIG)

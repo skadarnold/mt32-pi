@@ -47,6 +47,13 @@
 #include <wlan/bcm4343.h>
 #include <wlan/hostap/wpa_supplicant/wpasupplicant.h>
 
+extern "C"
+{
+	#include <lua.h>
+	#include <lualib.h>
+	#include <lauxlib.h>
+}
+
 #include "config.h"
 #include "control/control.h"
 #include "control/mister.h"
@@ -221,6 +228,9 @@ private:
 
 	// Event handling
 	TEventQueue m_EventQueue;
+
+	// Scripting engine
+	lua_State* m_pLuaState;
 
 	static void EventHandler(const TEvent& Event);
 	static void USBMIDIDeviceRemovedHandler(CDevice* pDevice, void* pContext);

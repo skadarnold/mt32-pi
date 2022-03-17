@@ -5,7 +5,7 @@
 include Config.mk
 
 .DEFAULT_GOAL=all
-.PHONY: circle-stdlib mt32emu fluidsynth all clean veryclean
+.PHONY: circle-stdlib mt32emu fluidsynth lua all clean veryclean
 
 #
 # Configure circle-stdlib
@@ -104,9 +104,24 @@ $(FLUIDSYNTHBUILDDIR)/.done: $(CIRCLESTDLIBHOME)/.done
 	@touch $@
 
 #
+# Build Lua
+#
+lua: $(LUAHOME)/liblua.a
+
+$(LUAHOME)/liblua.a:
+	@patch -N -p1 --no-backup-if-mismatch -r - -d $(LUAHOME) < patches/lua-5.4.4-circle.patch
+
+	@$(MAKE) -C $(LUAHOME) a \
+	CC="$(PREFIX)gcc" \
+	AR="$(PREFIX)ar rc" \
+	RANLIB="$(PREFIX)ranlib" \
+	CFLAGS="$(CFLAGS_FOR_TARGET) \$$(MYCFLAGS) -Wall -Werror -O3 -fno-stack-protector -fno-common" \
+	MYCFLAGS="\$$(LOCAL)"
+
+#
 # Build kernel itself
 #
-all: circle-stdlib mt32emu fluidsynth
+all: circle-stdlib mt32emu fluidsynth lua
 	@$(MAKE) -f Kernel.mk $(KERNEL).img $(KERNEL).hex
 
 #
@@ -122,6 +137,7 @@ veryclean: clean
 	# Reverse patches
 	@patch -R -N -p1 --no-backup-if-mismatch -r - -d $(CIRCLEHOME) < patches/circle-44.4-minimal-usb-drivers.patch
 	@patch -R -N -p1 --no-backup-if-mismatch -r - -d $(FLUIDSYNTHHOME) < patches/fluidsynth-2.2.6-circle.patch
+	@patch -R -N -p1 --no-backup-if-mismatch -r - -d $(LUAHOME) < patches/lua-5.4.4-circle.patch
 
 	# Clean circle-stdlib
 	@$(MAKE) -C $(CIRCLESTDLIBHOME) mrproper
@@ -132,3 +148,6 @@ veryclean: clean
 
 	# Clean FluidSynth
 	@$(RM) -r $(FLUIDSYNTHBUILDDIR)
+
+	# Clean Lua
+	@$(MAKE) -C $(LUAHOME) clean
