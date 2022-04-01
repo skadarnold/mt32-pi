@@ -1,5 +1,5 @@
 //
-// udpmidi.h
+// mdnsresponder.h
 //
 // mt32-pi - A baremetal MIDI synthesizer for Raspberry Pi
 // Copyright (C) 2020-2022 Dale Whinham <daleyo@gmail.com>
@@ -20,37 +20,35 @@
 // mt32-pi. If not, see <http://www.gnu.org/licenses/>.
 //
 
-#ifndef _udpmidi_h
-#define _udpmidi_h
+#ifndef _mdnsresponder_h
+#define _mdnsresponder_h
 
 #include <circle/net/socket.h>
 #include <circle/sched/task.h>
 
-class CUDPMIDIHandler
+class CMDNSResponder : protected CTask
 {
 public:
-	virtual void OnUDPMIDIDataReceived(const u8* pData, size_t nSize) = 0;
-};
-
-class CUDPMIDIReceiver : protected CTask
-{
-public:
-	CUDPMIDIReceiver(CUDPMIDIHandler* pHandler);
-	virtual ~CUDPMIDIReceiver() override;
+	CMDNSResponder();
+	virtual ~CMDNSResponder() override;
 
 	bool Initialize();
 
 	virtual void Run() override;
 
 private:
+	void Probe();
+	void Announce();
+	void Goodbye();
+
+	static constexpr size_t MaxMDNSNameLength = 256;
+
 	// UDP socket
 	CSocket* m_pSocket;
 
 	// Socket receive buffer
-	u8 m_ReceiveBuffer[FRAME_BUFFER_SIZE];
-
-	// Callback handler
-	CUDPMIDIHandler* m_pHandler;
+	u8 m_Buffer[FRAME_BUFFER_SIZE];
+	char m_DNSName[MaxMDNSNameLength];
 };
 
 #endif

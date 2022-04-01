@@ -5,7 +5,7 @@
 include Config.mk
 
 .DEFAULT_GOAL=all
-.PHONY: circle-stdlib mt32emu fluidsynth all clean veryclean
+.PHONY: circle-stdlib mdns mt32emu fluidsynth all clean veryclean
 
 #
 # Configure circle-stdlib
@@ -43,6 +43,15 @@ circle-stdlib: $(CIRCLESTDLIBHOME)/.done
 
 $(CIRCLESTDLIBHOME)/.done: $(CIRCLE_STDLIB_CONFIG)
 	@$(MAKE) -C $(CIRCLESTDLIBHOME)
+	touch $@
+
+#
+# Patch mdns
+#
+mdns: $(MDNSHOME)/.done
+
+$(MDNSHOME)/.done:
+	@patch -N -p1 --no-backup-if-mismatch -r - -d $(MDNSHOME) < patches/mdns-1.4.2-circle.patch
 	touch $@
 
 #
@@ -107,7 +116,7 @@ $(FLUIDSYNTHBUILDDIR)/.done: $(CIRCLESTDLIBHOME)/.done
 #
 # Build kernel itself
 #
-all: circle-stdlib mt32emu fluidsynth
+all: circle-stdlib mdns mt32emu fluidsynth
 	@$(MAKE) -f Kernel.mk $(KERNEL).img $(KERNEL).hex
 
 #
@@ -124,10 +133,14 @@ veryclean: clean
 	@patch -R -N -p1 --no-backup-if-mismatch -r - -d $(CIRCLEHOME) < patches/circle-44.4-minimal-usb-drivers.patch
 	@patch -R -N -p1 --no-backup-if-mismatch -r - -d $(CIRCLEHOME) < patches/circle-44.4-multicast.patch
 	@patch -R -N -p1 --no-backup-if-mismatch -r - -d $(FLUIDSYNTHHOME) < patches/fluidsynth-2.2.6-circle.patch
+	@patch -R -N -p1 --no-backup-if-mismatch -r - -d $(MDNSHOME) < patches/mdns-1.4.2-circle.patch
 
 	# Clean circle-stdlib
 	@$(MAKE) -C $(CIRCLESTDLIBHOME) mrproper
 	@$(RM) $(CIRCLESTDLIBHOME)/.done
+
+	# Clean mdns
+	@$(RM) $(MDNSHOME)/.done
 
 	# Clean mt32emu
 	@$(RM) -r $(MT32EMUBUILDDIR)
