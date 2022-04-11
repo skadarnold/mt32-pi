@@ -903,8 +903,6 @@ void CMT32Pi::UpdateNetwork()
 		delete m_pFTPDaemon;
 		m_pFTPDaemon = nullptr;
 	}
-
-	m_pNet->Process();
 }
 
 void CMT32Pi::UpdateMIDI()
