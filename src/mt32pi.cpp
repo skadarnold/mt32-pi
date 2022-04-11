@@ -829,7 +829,9 @@ void CMT32Pi::UpdateNetwork()
 	if (!m_pNet)
 		return;
 
-	const bool bNetIsRunning = m_pNet->IsRunning();
+	bool bNetIsRunning = m_pNet->IsRunning();
+	if (m_pConfig->NetworkMode == CConfig::TNetworkMode::WiFi)
+		bNetIsRunning &= m_WPASupplicant.IsConnected();
 
 	if (!m_bNetworkReady && bNetIsRunning)
 	{
