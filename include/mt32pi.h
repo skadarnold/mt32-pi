@@ -231,6 +231,10 @@ private:
 
 	// Scripting engine
 	lua_State* m_pLuaState;
+	static int LuaPanicHandler(lua_State* pLuaState);
+	static int LuaSetMasterVolume(lua_State* pLuaState);
+	static int LuaSendMIDIShortMessage(lua_State* pLuaState);
+	static int LuaSendMIDISysExMessage(lua_State* pLuaState);
 
 	static void EventHandler(const TEvent& Event);
 	static void USBMIDIDeviceRemovedHandler(CDevice* pDevice, void* pContext);

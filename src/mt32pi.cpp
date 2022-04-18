@@ -56,6 +56,10 @@ enum class TCustomSysExCommand : u8
 	SetMT32ReversedStereo = 0x04,
 };
 
+#define REGISTER_LUA_FUNCTION(NAME) \
+	lua_pushcfunction(m_pLuaState, Lua##NAME); \
+	lua_setglobal(m_pLuaState, #NAME);
+
 CMT32Pi* CMT32Pi::s_pThis = nullptr;
 
 CMT32Pi::CMT32Pi(CI2CMaster* pI2CMaster, CSPIMaster* pSPIMaster, CInterruptSystem* pInterrupt, CGPIOManager* pGPIOManager, CSerialDevice* pSerialDevice, CUSBHCIDevice* pUSBHCI)
@@ -310,9 +314,15 @@ bool CMT32Pi::Initialize(bool bSerialMIDIAvailable)
 	// Init scripting engine
 	m_pLuaState = luaL_newstate();
 	luaL_openlibs(m_pLuaState);
+	lua_atpanic(m_pLuaState, LuaPanicHandler);
 
-	if (luaL_loadfile(m_pLuaState, "SD:midi.lua") == LUA_OK)
+	if (luaL_dofile(m_pLuaState, "SD:midi.lua") == LUA_OK)
+	{
+		REGISTER_LUA_FUNCTION(SetMasterVolume);
+		REGISTER_LUA_FUNCTION(SendMIDIShortMessage);
+		REGISTER_LUA_FUNCTION(SendMIDISysExMessage);
 		m_pLogger->Write(MT32PiName, LogNotice, "Loaded Lua script");
+	}
 	else
 	{
 		m_pLogger->Write(MT32PiName, LogNotice, "Lua script not loaded");
@@ -650,6 +660,32 @@ void CMT32Pi::OnUnderVoltageDetected()
 	LCDLog(TLCDLogType::Warning, "Low voltage! Chk PSU");
 }
 
+int CMT32Pi::LuaSetMasterVolume(lua_State* pLuaState)
+{
+	const s32 nVolume = static_cast<s32>(luaL_checknumber(pLuaState, 1));
+	s_pThis->SetMasterVolume(nVolume);
+	return 0;
+}
+
+int CMT32Pi::LuaSendMIDIShortMessage(lua_State* pLuaState)
+{
+	const s32 nMessage = (luaL_checkinteger(pLuaState, -3) & 0xFF) |
+			     ((luaL_checkinteger(pLuaState, -2) & 0xFF) << 8) |
+			     ((luaL_checkinteger(pLuaState, -1) & 0xFF) << 16);
+	s_pThis->OnShortMessage(nMessage);
+	return 0;
+}
+
+int CMT32Pi::LuaSendMIDISysExMessage(lua_State* pLuaState)
+{
+	size_t nLength;
+	const u8* const pMessage = reinterpret_cast<const u8*>(lua_tolstring(pLuaState, -1, &nLength));
+
+	// Discard null terminator
+	s_pThis->OnSysExMessage(pMessage, nLength - 1);
+	return 0;
+}
+
 void CMT32Pi::OnShortMessage(u32 nMessage)
 {
 	// Filter using scripting engine
@@ -662,7 +698,15 @@ void CMT32Pi::OnShortMessage(u32 nMessage)
 		lua_pushinteger(m_pLuaState, nMessage & 0xFF);
 		lua_pushinteger(m_pLuaState, (nMessage >> 8) & 0xFF);
 		lua_pushinteger(m_pLuaState, (nMessage >> 16) & 0xFF);
-		lua_call(m_pLuaState, 3, LUA_MULTRET);
+		if (lua_pcall(m_pLuaState, 3, LUA_MULTRET, 0) != LUA_OK)
+		{
+			const char* const pMessage = lua_tostring(m_pLuaState, -1);
+			lua_pop(m_pLuaState, 1);
+
+			CLogger::Get()->Write(MT32PiName, LogError, "Lua error: %s", pMessage);
+			LCDLog(TLCDLogType::Error, "Lua error: %s", pMessage);
+			return;
+		}
 
 		const int nReturns = lua_gettop(m_pLuaState) - nStackSize;
 
@@ -672,9 +716,9 @@ void CMT32Pi::OnShortMessage(u32 nMessage)
 			return;
 		}
 
-		nMessage = (lua_tointeger(m_pLuaState, -1) & 0xFF) |
-			   ((lua_tointeger(m_pLuaState, -2) & 0xFF) << 8) |
-			   ((lua_tointeger(m_pLuaState, -3) & 0xFF) << 16);
+		nMessage = (luaL_checkinteger(m_pLuaState, -3) & 0xFF) |
+			   ((luaL_checkinteger(m_pLuaState, -2) & 0xFF) << 8) |
+			   ((luaL_checkinteger(m_pLuaState, -1) & 0xFF) << 16);
 
 		lua_pop(m_pLuaState, nReturns);
 	}
@@ -870,7 +914,7 @@ void CMT32Pi::UpdateUSB(bool bStartup)
 
 void CMT32Pi::UpdateNetwork()
 {
-	if (!m_pNet)
+	if (!m_pNet || !m_pNetDevice)
 		return;
 
 	bool bNetIsRunning = m_pNet->IsRunning();
@@ -1215,7 +1259,7 @@ void CMT32Pi::DeferSwitchSoundFont(size_t nIndex)
 	const char* pName = m_pSoundFontSynth->GetSoundFontManager().GetSoundFontName(nIndex);
 	LCDLog(TLCDLogType::Notice, "SF %ld: %s", nIndex, pName ? pName : "- N/A -");
 	m_nDeferredSoundFontSwitchIndex = nIndex;
-	m_nDeferredSoundFontSwitchTime  = CTimer::Get()->GetTicks();
+	m_nDeferredSoundFontSwitchTime  = m_pTimer->GetTicks();
 	m_bDeferredSoundFontSwitchFlag  = true;
 }
 
@@ -1345,20 +1389,16 @@ void CMT32Pi::IRQMIDIReceiveHandler(const u8* pData, size_t nSize)
 	}
 }
 
+int CMT32Pi::LuaPanicHandler(lua_State* pLuaState)
+{
+	CLogger::Get()->Write(MT32PiName, LogPanic, "Lua error: %s", lua_tostring(pLuaState, -1));
+	return 0;
+}
+
 void CMT32Pi::PanicHandler()
 {
 	if (!s_pThis || !s_pThis->m_pLCD)
 		return;
-
-	// Kill UI task
-	s_pThis->m_bRunning = false;
-	while (!s_pThis->m_bUITaskDone)
-		;
-
-	const char* pGuru = "Guru Meditation:";
-	u8 nOffsetX = CUserInterface::CenterMessageOffset(*s_pThis->m_pLCD, pGuru);
-	s_pThis->m_pLCD->Clear(true);
-	s_pThis->m_pLCD->Print(pGuru, nOffsetX, 0, true, true);
 
 	char Buffer[LOGGER_BUFSIZE];
 	s_pThis->m_pLogger->Read(Buffer, sizeof(Buffer), false);
@@ -1378,6 +1418,16 @@ void CMT32Pi::PanicHandler()
 	pMessageStart = strstr(pMessageStart, ": ") + 2;
 	char* pMessageEnd = strstr(pMessageStart, "\x1B[0m");
 	*pMessageEnd = '\0';
+
+	// Kill other tasks
+	s_pThis->m_bRunning = false;
+	while (!s_pThis->m_bUITaskDone)
+		;
+
+	const char* pGuru = "Guru Meditation:";
+	u8 nOffsetX = CUserInterface::CenterMessageOffset(*s_pThis->m_pLCD, pGuru);
+	s_pThis->m_pLCD->Clear(true);
+	s_pThis->m_pLCD->Print(pGuru, nOffsetX, 0, true, true);
 
 	const size_t nMessageLength = strlen(pMessageStart);
 	size_t nCurrentScrollOffset = 0;
