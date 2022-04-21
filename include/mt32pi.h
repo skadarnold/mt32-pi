@@ -62,6 +62,7 @@ extern "C"
 #include "midiparser.h"
 #include "net/applemidi.h"
 #include "net/ftpdaemon.h"
+#include "net/luarepl.h"
 #include "net/udpmidi.h"
 #include "pisound.h"
 #include "power.h"
@@ -173,6 +174,7 @@ private:
 	CAppleMIDIParticipant* m_pAppleMIDIParticipant;
 	CUDPMIDIReceiver* m_pUDPMIDIReceiver;
 	CFTPDaemon* m_pFTPDaemon;
+	CLuaREPL* m_pLuaREPL;
 
 	CBcmRandomNumberGenerator m_Random;
 
@@ -231,7 +233,9 @@ private:
 
 	// Scripting engine
 	lua_State* m_pLuaState;
+
 	static int LuaPanicHandler(lua_State* pLuaState);
+	static int LuaLCDLog(lua_State* pLuaState);
 	static int LuaSetMasterVolume(lua_State* pLuaState);
 	static int LuaSendMIDIShortMessage(lua_State* pLuaState);
 	static int LuaSendMIDISysExMessage(lua_State* pLuaState);
@@ -244,6 +248,7 @@ private:
 	static void PanicHandler();
 
 	static CMT32Pi* s_pThis;
+	static const struct luaL_Reg s_LuaLib[];
 };
 
 #endif
