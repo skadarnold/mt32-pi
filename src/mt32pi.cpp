@@ -979,7 +979,7 @@ size_t CMT32Pi::ReceiveSerialMIDI(u8* pOutData, size_t nSize)
 		return 0;
 	}
 
-	u8* pOutDataCopy;
+	u8* pOutDataCopy = new u8;
 	memcpy (pOutDataCopy, pOutData, nSize);
 
 	m_pUSBMIDIDevice->SendPlainMIDI(0, pOutDataCopy, nSize);
