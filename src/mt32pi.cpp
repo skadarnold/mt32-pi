@@ -979,7 +979,10 @@ size_t CMT32Pi::ReceiveSerialMIDI(u8* pOutData, size_t nSize)
 		return 0;
 	}
 
-	m_pUSBMIDIDevice->SendPlainMIDI(0, pOutData, nSize);
+	u8* pOutDataCopy;
+	memcpy (pOutDataCopy, pOutData, nSize);
+
+	m_pUSBMIDIDevice->SendPlainMIDI(0, pOutDataCopy, nSize);
 
 	// Replay received MIDI data out via the serial port ('software thru')
 	if (m_pConfig->MIDIGPIOThru)
