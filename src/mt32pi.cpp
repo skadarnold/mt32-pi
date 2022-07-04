@@ -983,6 +983,7 @@ size_t CMT32Pi::ReceiveSerialMIDI(u8* pOutData, size_t nSize)
 	if (m_pConfig->MIDIGPIOThru)
 	{
 		int nSendResult = m_pSerial->Write(pOutData, nResult);
+		int nSendResult = m_pUSBMIDIDevice->Write(pOutData, nResult);
 		if (nSendResult != nResult)
 		{
 			m_pLogger->Write(MT32PiName, LogError, "received %d bytes, but only sent %d bytes", nResult, nSendResult);
